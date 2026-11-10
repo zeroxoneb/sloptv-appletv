@@ -78,6 +78,53 @@ Reusing the **`cookieWrites`** array that `verifySignInCode` already returns mea
 
 Standard RFC 8628 error cases to cover: `slow_down` (TV polled too fast → raise its interval), `expired` (code aged out), `denied`.
 
+## Implementation notes
+
+The design above is the *what*. These are the details an implementer (or an AI pair) will otherwise have to invent — written so you can build without guessing. The one thing this document **cannot** contain is your own code; see the integration checklist last.
+
+### Pending-authorization record
+
+One row/document per `device/start` call. Suggested fields:
+
+| Field | Notes |
+|---|---|
+| `id` | Internal key. |
+| `deviceCodeHash` | Store a **hash** of `deviceCode` (e.g. SHA-256), not the value — it's a bearer secret, like a session token. Poll looks up by hashing the presented code. |
+| `userCode` | Stored as shown (uppercase, no separator) and looked up case-insensitively; the `/link` page finds the record by this. |
+| `clientLabel` | From `start` request, shown on the approval screen ("Slop TV on Apple TV"). Treat as untrusted — escape it, cap length. |
+| `status` | `pending` → `approved` \| `denied` \| `expired` \| `consumed`. |
+| `userId` | Null until approved; set to the approver's user on Allow. |
+| `createdAt`, `expiresAt` | ~10 min TTL. Expired records are terminal; sweep or lazily expire on read. |
+| `lastPolledAt` | To enforce `slow_down`. |
+
+### Code generation
+
+- `deviceCode`: ≥128 bits from a CSPRNG, URL-safe. The only secret here.
+- `userCode`: short and human-typeable — e.g. 8 chars from a reduced alphabet (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, no `0/O/1/I`), shown grouped as `KXTZ-QRDP`. Low entropy is fine **because** it's useless without a logged-in human tapping Allow in the 10-min window; still, rate-limit `/link` lookups and consider locking a record after a few failed code entries.
+
+### The `/link` approval page
+
+- Requires a signed-in session. If the user isn't signed in, run your **existing** sign-in first (email code or Sign in with X — unchanged), then return to the approval screen with the `code` preserved.
+- The Allow/Deny action is a state-changing POST → protect it with your normal **CSRF** defense, same as your other forms.
+- On Allow, write `userId` and set `status = approved`. On Deny, `status = denied`.
+- `verificationUriComplete` (`/link?code=…`) pre-fills the code so the QR path is one tap; `/link` with no code shows a field to type `userCode` (for users who'd rather type than scan).
+
+### Poll semantics
+
+- Look up by `deviceCodeHash`. Unknown/expired → `expired`. `pending`/`denied` → return as-is.
+- On `approved`: mint the session exactly as your existing sign-in does, return the `cookieWrites`, and set `status = consumed` atomically so a second poll can't re-mint. (Return `approved` only on the poll that consumes it; subsequent polls get `expired`.)
+- `slow_down`: if a poll arrives sooner than `intervalMs` after `lastPolledAt`, return a `slow_down`-style refusal and have the TV add to its interval (the app already backs off).
+
+### Integration checklist (needs your code, not this doc)
+
+The device flow is a new *trigger and delivery* wrapper around sign-in you already have. To build it, put these in front of whoever implements (including if that's Claude):
+
+1. **`verifySignInCode`** — specifically how it produces the `cookieWrites` array and what's in it. `device/poll` returns the identical shape; the app installs it the same way.
+2. **The X OAuth callback / web sign-in handler** — how a completed sign-in becomes a session for a user. The `/link` page reuses this verbatim; only the "then mark this `userCode` approved" step is new.
+3. **Your typed contract** (`sloptv-contract`, versioning, refusal codes) — add the three methods there so inputs are validated like the rest of the API. Reuse existing refusals where they fit (`LINK_CONSUMED`, `INTENT_USED`, `INTENT_EXPIRED`, `RATE_LIMITED`).
+
+With those three in context, the endpoints are a few hundred lines. Without them, they can't be built correctly — the session minting is the whole point and only you have it.
+
 ## Security notes
 
 - `deviceCode` is the secret and lives only on the TV; `userCode` is low-entropy and only meaningful during the short window with explicit human approval, so guessing it is useless without a logged-in approver.
