@@ -1,0 +1,11 @@
+# Your personal signing settings
+Signing.local.xcconfig
+
+# Xcode per-user state and build output
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+
+# macOS
+.DS_Store

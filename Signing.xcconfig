@@ -1,0 +1,14 @@
+// Code signing. Only needed to install on a real Apple TV; the simulator works as-is.
+//
+// Don't edit this file. Copy your settings into Signing.local.xcconfig (git-ignored):
+//
+//   DEVELOPMENT_TEAM = ABCDE12345
+//   PRODUCT_BUNDLE_IDENTIFIER = com.yourname.sloptv
+//
+// DEVELOPMENT_TEAM is your 10-character Team ID (developer.apple.com → Account →
+// Membership details). The bundle ID can be any reverse-DNS string unique to your team.
+
+DEVELOPMENT_TEAM =
+PRODUCT_BUNDLE_IDENTIFIER = com.example.sloptv
+
+#include? "Signing.local.xcconfig"
