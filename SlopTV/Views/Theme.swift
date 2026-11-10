@@ -73,3 +73,37 @@ struct LiveBadge: View {
         .foregroundStyle(.white)
     }
 }
+
+/// A short message that floats in the corner for a couple of seconds.
+@MainActor @Observable
+final class ToastModel {
+    private(set) var message: String?
+    private var hideTask: Task<Void, Never>?
+
+    func show(_ text: String) {
+        message = text
+        hideTask?.cancel()
+        hideTask = Task {
+            try? await Task.sleep(for: .seconds(2.5))
+            if !Task.isCancelled { message = nil }
+        }
+    }
+}
+
+extension View {
+    func toast(_ model: ToastModel) -> some View {
+        overlay(alignment: .topTrailing) {
+            if let message = model.message {
+                Text(message)
+                    .font(.headline)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 16)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(60)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeOut(duration: 0.25), value: model.message)
+    }
+}

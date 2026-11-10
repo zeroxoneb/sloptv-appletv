@@ -27,6 +27,18 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
+      <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "5A0000000000000000000024"
+               BuildableName = "SlopTVUITests.xctest"
+               BlueprintName = "SlopTVUITests"
+               ReferencedContainer = "container:SlopTV.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -51,6 +63,10 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "-autoplayLive"
+            isEnabled = "NO">
+         </CommandLineArgument>
+         <CommandLineArgument
+            argument = "-signIn"
             isEnabled = "NO">
          </CommandLineArgument>
       </CommandLineArguments>

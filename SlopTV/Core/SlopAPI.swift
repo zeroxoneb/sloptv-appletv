@@ -164,4 +164,62 @@ final class SlopAPI: @unchecked Sendable {
     }
 
     var cookies: [HTTPCookie] { HTTPCookieStorage.shared.cookies(for: Self.base) ?? [] }
+
+    // MARK: Account (needs a signed-in session; see Account.swift)
+
+    /// Read-your-writes token the site hands back after a write; echoed on later requests.
+    private var bookmark: String?
+
+    /// A JSON request made the way the website's own `fetch()` calls are.
+    private func json(_ method: String, _ path: String, body: [String: Any]? = nil,
+                      refererVideo: String? = nil) async throws -> [String: Any] {
+        var req = URLRequest(url: URL(string: path, relativeTo: Self.base)!.absoluteURL)
+        req.httpMethod = method
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body {
+            req.httpBody = try JSONSerialization.data(withJSONObject: body)
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        let referer = refererVideo.map { Self.base.appendingPathComponent("v/\($0)") } ?? Self.base
+        for (k, v) in Self.sameOriginFetchHeaders(referer: referer) { req.setValue(v, forHTTPHeaderField: k) }
+        if let bookmark { req.setValue(bookmark, forHTTPHeaderField: "x-sloptv-bookmark") }
+
+        let (data, response) = try await session.data(for: req)
+        if let mark = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "x-sloptv-bookmark") {
+            bookmark = mark
+        }
+        try Self.check(response, data)
+        return (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    }
+
+    /// `GET /api/me`: `signedIn` plus profile fields when signed in.
+    func me() async throws -> [String: Any] {
+        try await json("GET", "/api/me")
+    }
+
+    struct Social {
+        var signedIn: Bool
+        var rating: Int      // 1 = liked, -1 = disliked, 0 = neither
+        var likes: Int?
+    }
+
+    func social(videoID: String) async throws -> Social {
+        let d = try await json("GET", "/api/videos/\(Self.pathSafe(videoID))/social", refererVideo: videoID)
+        let counts = d["counts"] as? [String: Any]
+        return Social(signedIn: d["signedIn"] as? Bool ?? false,
+                      rating: (d["rating"] as? NSNumber)?.intValue ?? 0,
+                      likes: (counts?["likes"] as? NSNumber)?.intValue)
+    }
+
+    /// Sets your rating for a film: 1 like, 0 none, -1 dislike. Returns the new rating and like count.
+    func rate(videoID: String, value: Int) async throws -> (rating: Int, likes: Int?) {
+        let d = try await json("POST", "/api/videos/\(Self.pathSafe(videoID))/rating",
+                               body: ["value": value], refererVideo: videoID)
+        return ((d["rating"] as? NSNumber)?.intValue ?? value, (d["likes"] as? NSNumber)?.intValue)
+    }
+
+    private static func pathSafe(_ id: String) -> String {
+        id.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? id
+    }
 }

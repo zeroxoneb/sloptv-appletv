@@ -36,7 +36,6 @@ final class LiveModel {
 
 struct LiveView: View {
     @State private var model = LiveModel()
-    @State private var watching = false
 
     var body: some View {
         NavigationStack {
@@ -81,7 +80,6 @@ struct LiveView: View {
             .navigationDestination(for: Video.self) { DetailView(video: $0) }
             .task { await model.keepFresh() }
         }
-        .fullScreenCover(isPresented: $watching) { LivePlayerScreen() }
     }
 
     private func nowPlaying(_ slot: LiveSlot) -> some View {
@@ -119,7 +117,7 @@ struct LiveView: View {
                     }
                 }
 
-                Button { watching = true } label: {
+                Button { Playback.playLive() } label: {
                     Label("Watch Live", systemImage: "play.fill").padding(.horizontal, 20)
                 }
                 .padding(.top, 10)
@@ -185,46 +183,5 @@ final class LiveChannelPlayer {
         player.pause()
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
         endObserver = nil
-    }
-}
-
-struct LivePlayerScreen: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var channel = LiveChannelPlayer()
-    @State private var showBanner = true
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            Color.black.ignoresSafeArea()
-            if let error = channel.error {
-                PlaybackError(message: error, retry: { Task { await channel.start() } }, close: { dismiss() })
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                SystemPlayer(player: channel.player, linear: true).ignoresSafeArea()
-                if channel.slot == nil { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
-            }
-
-            if let slot = channel.slot, showBanner {
-                HStack(spacing: 20) {
-                    LiveBadge()
-                    VStack(alignment: .leading) {
-                        Text(slot.title).font(.headline)
-                        Text(slot.creator.displayName).font(.caption).foregroundStyle(Theme.muted)
-                    }
-                }
-                .padding(24)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                .padding(60)
-                .transition(.opacity)
-                .allowsHitTesting(false)
-            }
-        }
-        .task { await channel.start() }
-        .task(id: channel.slot?.slotId) {
-            withAnimation { showBanner = true }
-            try? await Task.sleep(for: .seconds(6))
-            withAnimation { showBanner = false }
-        }
-        .onDisappear { channel.stop() }
     }
 }

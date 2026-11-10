@@ -1,9 +1,8 @@
 import SwiftUI
 
 struct HomeView: View {
+    @MainActor private static var didAutoplay = false
     @State private var model = HomeModel()
-    @State private var playing: Video?
-    @State private var watchingLive = false
 
     var body: some View {
         NavigationStack {
@@ -12,7 +11,7 @@ struct HomeView: View {
                     HeroView(video: model.hero,
                              isLive: model.live?.now != nil,
                              onPlay: { video in
-                                 if model.live?.now?.videoId == video.id { watchingLive = true } else { playing = video }
+                                 if model.live?.now?.videoId == video.id { Playback.playLive() } else { Playback.play(video) }
                              })
                     ForEach(model.shelves) { shelf in
                         ShelfRow(shelf: shelf)
@@ -24,16 +23,16 @@ struct HomeView: View {
             .background(Theme.background)
             .navigationDestination(for: Video.self) { DetailView(video: $0) }
             .task {
-                #if DEBUG
-                // `-autoplayLive` launch argument: jump straight into the channel (used for testing).
-                if ProcessInfo.processInfo.arguments.contains("-autoplayLive") { watchingLive = true }
-                #endif
+                // Debug flag: open the live channel once at launch (this task reruns whenever Home reappears).
+                if SlopTVApp.launchArgument("-autoplayLive") && !Self.didAutoplay {
+                    Self.didAutoplay = true
+                    try? await Task.sleep(for: .seconds(1)) // let the window appear first
+                    Playback.playLive()
+                }
                 await model.load()
             }
             .refreshable { await model.load() }
         }
-        .fullScreenCover(item: $playing) { PlayerScreen(video: $0) }
-        .fullScreenCover(isPresented: $watchingLive) { LivePlayerScreen() }
     }
 }
 

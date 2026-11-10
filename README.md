@@ -4,7 +4,7 @@
 
 An **unofficial**, open-source Apple TV app for watching AI-generated films from [tv.slop.cc](https://tv.slop.cc) on your TV, laid out like a streaming service.
 
-Built with SwiftUI and AVKit. No dependencies, no account, no tracking.
+Built with SwiftUI and AVKit. No dependencies and no tracking. You only need an account to like films.
 
 > **Not affiliated with tv.slop.cc.** This is a fan-made client. All videos, posters and creator names come from the site and belong to their creators. See [How playback works](#how-playback-works) before relying on it.
 
@@ -14,6 +14,7 @@ Built with SwiftUI and AVKit. No dependencies, no account, no tracking.
 - **Live**: the 24/7 Slop TV channel with a countdown and what's up next. **Watch Live** plays in sync with the broadcast schedule and moves from slot to slot on its own.
 - **Browse**: a full-screen grid with the site's category filters, sorted by Newest or Discover.
 - **Detail pages**: title, creator, duration, views, likes, tier, and a "More Like This" row.
+- **👍 Like films**, from the player's control bar while a film plays or from its page. Likes count on tv.slop.cc. Requires [linking your account](#liking-films).
 - **Native player**: Apple's standard player, with the Siri Remote, scrubbing, the info panel with title and artwork, and adaptive HLS streaming.
 - Dark theme matching the site, a layered parallax app icon, and Top Shelf art.
 
@@ -84,6 +85,13 @@ xcodebuild -project SlopTV.xcodeproj -scheme SlopTV \
   -destination 'generic/platform=tvOS' -allowProvisioningUpdates build
 ```
 
+Run the UI tests (they play the live channel in the simulator and press Back on a virtual Siri Remote):
+
+```sh
+xcodebuild test -project SlopTV.xcodeproj -scheme SlopTV \
+  -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
+```
+
 If `xcodebuild` complains about Command Line Tools, run `sudo xcode-select -s /Applications/Xcode.app` once.
 
 ## Using the app
@@ -92,8 +100,29 @@ If `xcodebuild` complains about Command Line Tools, run `sudo xcode-select -s /A
 |---|---|
 | Rows and grid | Swipe to move, click to open a film |
 | Film page | **Play** starts it; swipe down for More Like This |
-| Player | Click or swipe down for the controls and info panel; **Back** closes |
-| Live channel | Follows the broadcast, so seeking is off; **Back** leaves |
+| Player | Click or swipe down for the controls and info panel; **Back** returns to where you were (press it again if the controls are showing) |
+| Player, to like | Swipe down to show the controls, then select **👍 Like** at the right of the control bar |
+| Live channel | Follows the broadcast, so seeking is off; **Back** returns to the app |
+
+## Liking films
+
+Browsing and watching don't need an account. To 👍 films, link your tv.slop.cc account.
+
+The Apple TV can't show tv.slop.cc's sign-in: it needs a browser CAPTCHA or an X login. Instead, the app borrows the session from a browser where you're already signed in:
+
+1. On the Apple TV, open the **Account** tab and select **Sign In**. It shows a local address such as `http://192.168.1.20:8723/k3m9xq2p`, plus a QR code.
+2. On a computer on the **same network**, sign in at [tv.slop.cc](https://tv.slop.cc), then open that address.
+3. Follow the steps on the page: open developer tools → **Network**, reload tv.slop.cc, click the first request, and copy the value of the **Cookie** request header.
+4. Paste it and click **Send to Apple TV**. The TV checks the session with tv.slop.cc and switches to *Signed in*.
+
+Then, while a film plays, swipe down on the remote and select **👍 Like** in the control bar. Select it again to remove your like. Film pages have a 👍 button next to **Play** that shows the like count.
+
+**Security and privacy:**
+- The cookie only travels from your computer to your Apple TV over your local network, and is stored in the Apple TV's **Keychain**. It's never sent anywhere except tv.slop.cc.
+- The sign-in page only exists while the Sign In screen is open, and only at its random one-time address.
+- It's a plain HTTP page on your LAN, so only do this on a network you trust. Treat the cookie like a password: anyone with it can act as you on tv.slop.cc.
+- **Sign Out of This Apple TV** forgets the session on the TV only. Signing out on the website ends the session everywhere, after which the TV asks you to sign in again.
+- The first time, tvOS may ask permission for Slop TV to use the local network. Allow it, or the page won't load.
 
 ## How playback works
 
@@ -105,6 +134,9 @@ tv.slop.cc doesn't publish an API for apps. Browsing uses the same public JSON e
 | `GET /api/browse/discover?chip=…&seed=…&after=…` | Discover rows |
 | `GET /api/live/now` | The live channel's current slot and schedule |
 | `POST /api/play/{id}` | A short-lived HLS stream URL for one film |
+| `GET /api/me` | Whether the linked session is signed in |
+| `GET /api/videos/{id}/social` | Your rating and the like count for a film |
+| `POST /api/videos/{id}/rating` | `{"value": 1}` to like, `0` to remove the like |
 
 `/api/play` only answers requests that come from the website. To get a stream, the app does what a visit with **Safari** would: it loads the film's page to get a session cookie, then requests the stream with the headers a browser sends from that page (`User-Agent`, `Origin`, `Referer`, `Sec-Fetch-*`).
 
@@ -119,26 +151,30 @@ This works as of November 2026, but:
 - **Home rows**: edit `ShelfSpec.home` in [`SlopTV/Core/Models.swift`](SlopTV/Core/Models.swift). Categories match the site's filters: `all`, `music`, `episodes`, `originals`, `restyles`, `drips`, `sloptoberfest`.
 - **Colors**: [`SlopTV/Views/Theme.swift`](SlopTV/Views/Theme.swift).
 - **Icon and Top Shelf art**: edit and run `swift scripts/make_icons.swift`.
-- **Testing playback quickly**: in debug builds, the launch argument `-autoplayLive` opens the live channel at startup. It's in the shared scheme but turned off: Product → Scheme → Edit Scheme → Run → Arguments.
+- **Debug launch arguments**: in debug builds, `-autoplayLive` opens the live channel at startup and `-signIn` opens the Sign In screen. Both are in the shared scheme but turned off: Product → Scheme → Edit Scheme → Run → Arguments.
 
 ## Project layout
 
 ```
 SlopTV/
-  SlopTVApp.swift            App entry point and tab bar (Home / Live / Browse)
+  SlopTVApp.swift            App entry point and tab bar (Home / Live / Browse / Account)
   Core/
     Models.swift             API models and the list of home rows
     Models+Observable.swift  Paginated row model, home screen model
-    SlopAPI.swift            tv.slop.cc client: feeds, live schedule, playback
+    SlopAPI.swift            tv.slop.cc client: feeds, live schedule, playback, likes
+    Account.swift            Linked session (Keychain), likes store
+    LinkServer.swift         Local sign-in page served while Sign In is open
   Views/
     HomeView.swift           Billboard and rows
     LiveView.swift           Live channel screen and synced live player
     BrowseView.swift         Category grid
     DetailView.swift         Film page
-    PlayerScreen.swift       On-demand player (AVPlayerViewController)
+    Playback.swift           Full-screen player (AVPlayerViewController) with 👍 in the control bar
+    AccountView.swift        Account tab, Sign In screen with QR code
     PosterCard.swift         Focusable poster card and row
     Theme.swift              Colors and shared UI pieces
   Assets.xcassets            App icon, Top Shelf images, accent color
+SlopTVUITests/               UI test: Back closes the player and returns to the app
 scripts/make_icons.swift     Generates the icon and Top Shelf art
 Signing.xcconfig             Signing defaults (put yours in Signing.local.xcconfig)
 ```
@@ -148,6 +184,9 @@ Signing.xcconfig             Signing defaults (put yours in Signing.local.xcconf
 | Problem | Fix |
 |---|---|
 | *"Couldn't play this video"* | See [How playback works](#how-playback-works). If one film fails and others play, that film may have been removed. |
+| Sign-in page won't load | The computer must be on the same network as the Apple TV, and Slop TV needs local-network permission (Settings → Privacy & Security → Local Network on the Apple TV). Keep the Sign In screen open. |
+| *"That session isn't signed in"* | Sign in on tv.slop.cc first, reload, and copy the **Cookie** header from the request again (the whole value). |
+| 👍 says *"Sign in from the Account tab"* or *"session expired"* | Link your account (see [Liking films](#liking-films)). Sessions end when you sign out on the website. |
 | *"Too many plays just now"* | The site limits how many films you can start in a short time. Wait a minute. |
 | Signing error / "No account for team" | Check `DEVELOPMENT_TEAM` in `Signing.local.xcconfig`, and that your Apple ID is added under Xcode → Settings → Accounts. |
 | "Bundle identifier is not available" | Change `PRODUCT_BUNDLE_IDENTIFIER` to something unique. |
@@ -156,7 +195,7 @@ Signing.xcconfig             Signing defaults (put yours in Signing.local.xcconf
 
 ## Contributing
 
-Issues and pull requests are welcome. Ideas: search, creator pages, a Top Shelf extension with live content, subtitles (the site has some WebVTT captions), and sign-in for the Following feed.
+Issues and pull requests are welcome. Ideas: search, creator pages, a Top Shelf extension with live content, subtitles (the site has some WebVTT captions), 👎 and Save, and the Following feed for linked accounts.
 
 ## License
 

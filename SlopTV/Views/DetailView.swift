@@ -2,8 +2,9 @@ import SwiftUI
 
 struct DetailView: View {
     let video: Video
-    @State private var playing: Video?
     @State private var related = ShelfModel(ShelfSpec(title: "More Like This", source: .discover, chip: "all"))
+    @State private var toast = ToastModel()
+    private let ratings = RatingStore.shared
 
     var body: some View {
         ScrollView(.vertical) {
@@ -23,7 +24,8 @@ struct DetailView: View {
             }
             .ignoresSafeArea()
         }
-        .fullScreenCover(item: $playing) { PlayerScreen(video: $0) }
+        .toast(toast)
+        .task { if AccountModel.shared.isSignedIn { await ratings.refresh(video.id) } }
     }
 
     private var meta: [String] {
@@ -61,8 +63,16 @@ struct DetailView: View {
                     .font(.callout.monospacedDigit())
                     .foregroundStyle(Theme.muted)
 
-                Button { playing = video } label: {
-                    Label("Play", systemImage: "play.fill").padding(.horizontal, 30)
+                HStack(spacing: 30) {
+                    Button { Playback.play(video) } label: {
+                        Label("Play", systemImage: "play.fill").padding(.horizontal, 30)
+                    }
+                    Button { Task { toast.show(await ratings.toggleLike(video.id)) } } label: {
+                        Label("\(ratings.likes[video.id] ?? video.likes ?? 0)",
+                              systemImage: ratings.isLiked(video.id) ? "hand.thumbsup.fill" : "hand.thumbsup")
+                            .monospacedDigit()
+                    }
+                    .accessibilityLabel(ratings.isLiked(video.id) ? "Liked" : "Like")
                 }
                 .padding(.top, 10)
             }
