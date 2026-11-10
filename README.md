@@ -108,7 +108,7 @@ If `xcodebuild` complains about Command Line Tools, run `sudo xcode-select -s /A
 
 Browsing and watching don't need an account. To 👍 films, link your tv.slop.cc account.
 
-The Apple TV can't show tv.slop.cc's sign-in: it needs a browser CAPTCHA or an X login. Instead, the app borrows the session from a browser where you're already signed in:
+The Apple TV can't show tv.slop.cc's sign-in: it needs a browser CAPTCHA or an X login, and tvOS has no browser. Instead, the app borrows the session from a browser where you're already signed in:
 
 1. On the Apple TV, open the **Account** tab and select **Sign In**. It shows a local address such as `http://192.168.1.20:8723/k3m9xq2p`, plus a QR code.
 2. On a computer on the **same network**, sign in at [tv.slop.cc](https://tv.slop.cc), then open that address.
@@ -123,6 +123,8 @@ Then, while a film plays, swipe down on the remote and select **👍 Like** in t
 - It's a plain HTTP page on your LAN, so only do this on a network you trust. Treat the cookie like a password: anyone with it can act as you on tv.slop.cc.
 - **Sign Out of This Apple TV** forgets the session on the TV only. Signing out on the website ends the session everywhere, after which the TV asks you to sign in again.
 - The first time, tvOS may ask permission for Slop TV to use the local network. Allow it, or the page won't load.
+
+**A smoother sign-in, if the site adds it:** the cookie-paste step exists only because tv.slop.cc has no sign-in flow for browserless devices. A one-tap *Sign in with X* on your phone (the way TVs normally sign in) would need a small server-side addition. [`docs/device-sign-in-proposal.md`](docs/device-sign-in-proposal.md) is a ready-to-send spec for it — hand it to whoever runs the site.
 
 ## How playback works
 
